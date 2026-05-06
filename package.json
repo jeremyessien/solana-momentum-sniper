@@ -11,7 +11,7 @@
   },
   "scripts": {
     "dev": "tsx --env-file=.env src/index.ts",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "start": "node --env-file=.env dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -31,5 +31,8 @@
     "onlyBuiltDependencies": [
       "esbuild"
     ]
+  },
+  "dependencies": {
+    "zod": "^4.4.3"
   }
 }
