@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Audit log (per ADR-001 — wallet signing audit trail; never commit)
+audit/
+*.audit.log
+
+# Test coverage
+coverage/
+
+# Editor / OS
+.DS_Store
+.vscode/
+.idea/
+*.swp
+
+CLAUDE.md
