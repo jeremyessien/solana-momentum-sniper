@@ -77,4 +77,21 @@ describe('loadConfig', () => {
 
     expect(result.kind).toBe('err');
   });
+
+  test('NODE_ENV defaults to development; accepts production; rejects unknown values', () => {
+    const dev = loadConfig(validEnv);
+    expect(dev.kind).toBe('ok');
+    if (dev.kind === 'ok') {
+      expect(dev.value.NODE_ENV).toBe('development');
+    }
+
+    const prod = loadConfig({ ...validEnv, NODE_ENV: 'production' });
+    expect(prod.kind).toBe('ok');
+    if (prod.kind === 'ok') {
+      expect(prod.value.NODE_ENV).toBe('production');
+    }
+
+    const invalid = loadConfig({ ...validEnv, NODE_ENV: 'staging' });
+    expect(invalid.kind).toBe('err');
+  });
 });

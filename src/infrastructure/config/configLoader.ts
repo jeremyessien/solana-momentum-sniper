@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { err, ok, type Result } from '../../shared/result.js';
 
 const ConfigSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   DATABASE_PATH: z.string().min(1).default('./data/moonscout.db'),
   HELIUS_API_KEY: z.string().min(1, 'HELIUS_API_KEY is required'),
