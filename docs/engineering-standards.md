@@ -202,9 +202,27 @@ When MCP servers are added, they are documented in the project alongside any oth
 
 ---
 
+## Principle Twelve: Technical Choices Are Engineering Decisions, Not Defaults
+
+Every technical choice the codebase makes — the primitive types we represent values with, the data structures we hold them in, the algorithms that process them, the libraries that abstract over them, the concurrency primitives that schedule them, and the patterns that compose them — has consequences. The most common source of subtle bugs in production-grade systems, especially ones handling money, is defaulting to "the obvious answer" or "what most code does" without examining what the alternatives would have given us.
+
+The discipline this calls for is to treat each technical choice as a deliberate decision with documented reasoning, not a default. When picking a representation or approach, identify at least one alternative, compare them on the dimensions that matter for this codebase, and choose for cause. Treat the obvious answer as suspect until you have examined the alternatives and confirmed it is still the right one.
+
+This applies broadly. The numerical precision rule for chain-native amounts is one specific instance: lamports and other on-chain quantities are represented as `bigint`, never as `number`. JavaScript's `number` is IEEE 754 double-precision and silently loses integer precision above 2^53, which is sufficient for some lamport values but fails for cumulative balances, USD-equivalent computations, and any field whose use grows past the immediate one. The Solana TypeScript ecosystem has converged on `bigint` for chain-native amounts in 2024 and after for exactly this reason, and we follow that convention to avoid silent precision loss and conversion bugs at adapter boundaries.
+
+The same pattern of "the obvious answer is wrong because of a domain-specific or ecosystem-specific consideration" applies in many other places. When choosing between wall-clock and monotonic time, the obvious answer is wall-clock; the correct one for elapsed-time arithmetic is monotonic, because wall-clock can jump on NTP corrections or DST transitions. When choosing how to propagate failures, the obvious answer is thrown exceptions; the correct one for an audit-traceable financial system is values that flow through Result types as Principle Seven describes, because exceptions silently bypass the type system. When choosing a data structure, the obvious answer for a list of things is an array; the correct one depends on whether the access pattern is by index, by key, by ordering, or by membership. When choosing an algorithm, the obvious answer is the simplest one that works on small inputs; the correct one is the one that still works as data scales. When choosing a library, the obvious answer is the most popular one; the correct one is the one that fits the project's actual constraints.
+
+When uncertain about ecosystem conventions or current best practice, the rule is to web-search and cite a source rather than to guess from memory. The cost of one extra search is trivial compared to the cost of a wrong default in code that touches money. Stale knowledge, even well-informed stale knowledge, is not a substitute for verification.
+
+In financial, numerical, and state-machine code specifically, the default of doubt is asymmetric: assume the choice is wrong until proven right, not the other way around. The asymmetry exists because the cost of a wrong choice is real funds, while the cost of a slightly more deliberate decision is a few minutes of analysis. The trade is always worth it.
+
+This principle is the practical complement to Principle One. Principle One says question what the code is doing. Principle Twelve says question what the code is built from. Together they form the discipline that distinguishes a system that handles money safely from one that merely runs.
+
+---
+
 ## Putting The Principles Together
 
-The eleven principles above are not independent. They reinforce each other. Treating errors as values supports security by ensuring failures cannot silently propagate. Modern TypeScript practices support testing by making code easier to mock and verify. Good documentation supports questioning assumptions because the assumptions are written down where they can be examined.
+The twelve principles above are not independent. They reinforce each other. Treating errors as values supports security by ensuring failures cannot silently propagate. Modern TypeScript practices support testing by making code easier to mock and verify. Good documentation supports questioning assumptions because the assumptions are written down where they can be examined.
 
 When making any decision about how to write a piece of code, consider all the relevant principles together. A solution that satisfies several principles at once is generally better than one that satisfies a single principle at the cost of others. When principles seem to conflict, the conflict usually reveals that the design is not yet right, and the resolution is often to step back and rethink rather than to compromise on one principle to satisfy another.
 
