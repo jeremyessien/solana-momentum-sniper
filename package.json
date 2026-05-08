@@ -18,7 +18,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check ."
+    "check": "biome check .",
+    "check:helius": "tsx --env-file=.env scripts/check-helius-stream.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
