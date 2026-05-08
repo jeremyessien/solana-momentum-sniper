@@ -19,7 +19,8 @@
     "lint": "biome lint .",
     "format": "biome format --write .",
     "check": "biome check .",
-    "check:helius": "tsx --env-file=.env scripts/check-helius-stream.ts"
+    "check:helius": "tsx --env-file=.env scripts/check-helius-stream.ts",
+    "inspect:pumpfun": "tsx --env-file=.env scripts/inspect-pumpfun-create.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
