@@ -2,13 +2,14 @@
   "_notes": {
     "captured": "2026-05-08 via scripts/inspect-pumpfun-create.ts on Helius mainnet",
     "purpose": "Real Pump.fun CreateV2 transaction log array, used as test input for the upcoming parser in src/detection/.",
-    "createV2EventDiscriminator": [27, 114, 169, 77, 222, 235, 99, 118],
-    "createV2EventDiscriminatorBase64Prefix": "G3KpTd7rY3Y",
-    "createV2EventDiscriminatorHex": "1B72A94DDEEB6376",
+    "createEventDiscriminator": [27, 114, 169, 77, 222, 235, 99, 118],
+    "createEventDiscriminatorBase64Prefix": "G3KpTd7rY3Y",
+    "createEventDiscriminatorHex": "1B72A94DDEEB6376",
+    "createEventDiscriminatorVerifiedAs": "sha256('event:CreateEvent')[0..8] — confirmed by computing the hash and comparing to the bytes extracted from real captured data. Both the legacy `Create` instruction and the current `CreateV2` instruction emit the same `CreateEvent` type.",
     "tradeEventDiscriminator": [189, 219, 127, 211, 78, 230, 97, 238],
     "tradeEventDiscriminatorBase64Prefix": "vdt/007mYe4",
     "tradeEventDiscriminatorHex": "BDDB7FD34EE661EE",
-    "structureNote": "After the 8-byte discriminator the CreateV2Event payload is borsh-encoded: u32-LE length-prefix + UTF-8 name string, then symbol string, then uri string, then 32-byte pubkeys (mint, bondingCurve, creator), then numeric fields (timestamp i64, virtual reserves u64, etc.)."
+    "structureNote": "After the 8-byte discriminator the CreateEvent payload is borsh-encoded: u32-LE length-prefix + UTF-8 name string, then symbol string, then uri string, then 32-byte pubkeys (mint, bondingCurve, user, creator), then i64 timestamp, then four u64 fields (virtualTokenReserves, virtualSolReserves, realTokenReserves, tokenTotalSupply). Total 288 bytes for those 12 fields; full payload observed at 362 bytes — 74 trailing bytes correspond to additional fields not yet characterised."
   },
   "transaction": {
     "signature": "2EWjNcT6CDxSRn3dGCSGbRGvD8ewDvBzsvgFcvAzbV65ZSCyQSFH3HEs58u5ff6pzenLpWKNqJuw3fchyX9srYV8",
