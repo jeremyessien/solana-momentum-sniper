@@ -23,7 +23,8 @@
     "inspect:pumpfun": "tsx --env-file=.env scripts/inspect-pumpfun-create.ts",
     "verify:pumpfun-fixture": "tsx scripts/verify-pumpfun-create-fixture.ts",
     "capture:pumpfun-fixtures": "tsx --env-file=.env scripts/capture-pumpfun-fixtures.ts",
-    "investigate:rugcheck-fresh": "tsx --env-file=.env scripts/investigate-rugcheck-fresh-token.ts"
+    "investigate:rugcheck-fresh": "tsx --env-file=.env scripts/investigate-rugcheck-fresh-token.ts",
+    "investigate:pumpfun-race": "tsx --env-file=.env scripts/investigate-pumpfun-create-trade-race.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
