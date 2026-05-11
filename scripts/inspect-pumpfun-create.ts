@@ -5,8 +5,8 @@ import { createHeliusAdapter } from '../src/infrastructure/helius/heliusAdapter.
 import { createKitSubscriptionSource } from '../src/infrastructure/helius/kitSubscriptionSource.js';
 import { createLogger } from '../src/infrastructure/logger/logger.js';
 import type { EventMap } from '../src/shared/eventMap.js';
+import { PUMP_FUN_PROGRAM_ID } from '../src/shared/launchpadPrograms.js';
 
-const PUMP_FUN_PROGRAM_ID = '6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P';
 const RUN_DURATION_MS = 60_000;
 
 const main = async (): Promise<void> => {
