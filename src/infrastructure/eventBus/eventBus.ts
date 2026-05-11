@@ -2,12 +2,20 @@ type EventHandler<P> = (payload: P) => void | Promise<void>;
 
 export type EventErrorSink = (error: unknown, eventName: string) => void;
 
+export type IterateOptions = {
+  readonly signal: AbortSignal;
+};
+
 export type EventBus<TEventMap extends Record<string, unknown>> = {
   readonly publish: <K extends keyof TEventMap & string>(name: K, payload: TEventMap[K]) => void;
   readonly subscribe: <K extends keyof TEventMap & string>(
     name: K,
     handler: EventHandler<TEventMap[K]>,
   ) => () => void;
+  readonly iterate: <K extends keyof TEventMap & string>(
+    name: K,
+    options: IterateOptions,
+  ) => AsyncIterable<TEventMap[K]>;
 };
 
 export type CreateEventBusOptions = {
@@ -70,5 +78,57 @@ export const createEventBus = <TEventMap extends Record<string, unknown>>(
     };
   };
 
-  return { publish, subscribe };
+  const iterate = <K extends keyof TEventMap & string>(
+    name: K,
+    options: IterateOptions,
+  ): AsyncIterable<TEventMap[K]> => {
+    const { signal } = options;
+    const queue: TEventMap[K][] = [];
+    let resolveNext: (() => void) | null = null;
+    let done = signal.aborted;
+
+    const wakeUp = (): void => {
+      if (resolveNext === null) return;
+      const r = resolveNext;
+      resolveNext = null;
+      r();
+    };
+
+    const handler: EventHandler<TEventMap[K]> = (payload) => {
+      if (done) return;
+      queue.push(payload);
+      wakeUp();
+    };
+
+    const onAbort = (): void => {
+      done = true;
+      wakeUp();
+    };
+
+    const unsubscribe = subscribe(name, handler);
+    if (!done) {
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
+    return (async function* (): AsyncGenerator<TEventMap[K], void, undefined> {
+      try {
+        while (true) {
+          if (queue.length > 0) {
+            yield queue.shift() as TEventMap[K];
+            continue;
+          }
+          if (done) return;
+          await new Promise<void>((resolve) => {
+            resolveNext = resolve;
+          });
+        }
+      } finally {
+        done = true;
+        unsubscribe();
+        signal.removeEventListener('abort', onAbort);
+      }
+    })();
+  };
+
+  return { publish, subscribe, iterate };
 };

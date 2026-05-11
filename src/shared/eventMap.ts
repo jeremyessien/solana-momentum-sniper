@@ -1,4 +1,5 @@
 import type { DetectedToken } from './detectedToken.js';
+import type { ProgramLogEvent } from './programLogEvent.js';
 
 /**
  * Central registry of all events that flow through the event bus.
@@ -9,5 +10,6 @@ import type { DetectedToken } from './detectedToken.js';
  * The full catalog as planned is in `docs/architecture.md` Part Five.
  */
 export type EventMap = {
+  readonly rawProgramLogReceived: ProgramLogEvent;
   readonly newTokenLaunchDetected: DetectedToken;
 };

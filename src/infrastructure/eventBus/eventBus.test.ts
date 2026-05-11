@@ -73,6 +73,127 @@ describe('createEventBus', () => {
     expect(received).toEqual([1, 2]);
   });
 
+  test('iterate yields events published while iterating', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+    const received: number[] = [];
+
+    const iterPromise = (async () => {
+      for await (const n of bus.iterate('count', { signal: ctrl.signal })) {
+        received.push(n);
+        if (received.length === 3) break;
+      }
+    })();
+
+    bus.publish('count', 1);
+    bus.publish('count', 2);
+    bus.publish('count', 3);
+
+    await iterPromise;
+    expect(received).toEqual([1, 2, 3]);
+  });
+
+  test('iterate queues events arriving after iterate() but before iteration starts', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+    const iterable = bus.iterate('count', { signal: ctrl.signal });
+
+    bus.publish('count', 10);
+    bus.publish('count', 20);
+    await flushMicrotasks();
+
+    const received: number[] = [];
+    for await (const n of iterable) {
+      received.push(n);
+      if (received.length === 2) break;
+    }
+    expect(received).toEqual([10, 20]);
+  });
+
+  test('iterate loop completes when signal aborts', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+    const received: number[] = [];
+
+    const iterPromise = (async () => {
+      for await (const n of bus.iterate('count', { signal: ctrl.signal })) {
+        received.push(n);
+      }
+    })();
+
+    bus.publish('count', 1);
+    await flushMicrotasks();
+    ctrl.abort();
+
+    await iterPromise;
+    expect(received).toEqual([1]);
+  });
+
+  test('iterate completes immediately when signal is already aborted', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+    ctrl.abort();
+
+    const received: number[] = [];
+    for await (const n of bus.iterate('count', { signal: ctrl.signal })) {
+      received.push(n);
+    }
+    expect(received).toEqual([]);
+  });
+
+  test('iterate supports concurrent iterators that each receive every event', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+    const a: number[] = [];
+    const b: number[] = [];
+
+    const p1 = (async () => {
+      for await (const n of bus.iterate('count', { signal: ctrl.signal })) {
+        a.push(n);
+        if (a.length === 2) break;
+      }
+    })();
+    const p2 = (async () => {
+      for await (const n of bus.iterate('count', { signal: ctrl.signal })) {
+        b.push(n);
+        if (b.length === 2) break;
+      }
+    })();
+
+    bus.publish('count', 1);
+    bus.publish('count', 2);
+
+    await Promise.all([p1, p2]);
+    expect(a).toEqual([1, 2]);
+    expect(b).toEqual([1, 2]);
+  });
+
+  test('iterate cleanup runs when the loop body throws', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+    const received: number[] = [];
+
+    const iterPromise = (async () => {
+      for await (const n of bus.iterate('count', { signal: ctrl.signal })) {
+        received.push(n);
+        throw new Error('consumer-side blow-up');
+      }
+    })();
+
+    bus.publish('count', 99);
+    await expect(iterPromise).rejects.toThrow('consumer-side blow-up');
+
+    // After the throw, the subscription has been torn down. A subsequent
+    // regular subscriber should still receive new publishes (i.e. the bus
+    // itself is intact and the now-dead iterator no longer competes for them).
+    const after = vi.fn();
+    bus.subscribe('count', after);
+    bus.publish('count', 100);
+    await flushMicrotasks();
+    expect(received).toEqual([99]);
+    expect(after).toHaveBeenCalledWith(100);
+  });
+
   test('errorSink is invoked for sync throws and async rejections; other handlers still run', async () => {
     const errors: Array<{ name: string; message: string }> = [];
     const bus = createEventBus<TestEvents>({
