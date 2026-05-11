@@ -2,6 +2,11 @@ type EventHandler<P> = (payload: P) => void | Promise<void>;
 
 export type EventErrorSink = (error: unknown, eventName: string) => void;
 
+export type IteratorBacklogSink = (depth: number, eventName: string) => void;
+
+const BACKLOG_WARN_DEPTH = 100;
+const BACKLOG_ERROR_DEPTH = 1_000;
+
 export type IterateOptions = {
   readonly signal: AbortSignal;
 };
@@ -20,6 +25,7 @@ export type EventBus<TEventMap extends Record<string, unknown>> = {
 
 export type CreateEventBusOptions = {
   readonly errorSink?: EventErrorSink;
+  readonly onIteratorBacklog?: IteratorBacklogSink;
 };
 
 const defaultErrorSink: EventErrorSink = (error, eventName) => {
@@ -36,6 +42,7 @@ export const createEventBus = <TEventMap extends Record<string, unknown>>(
 ): EventBus<TEventMap> => {
   const subscribers = new Map<string, Set<EventHandler<unknown>>>();
   const errorSink = options.errorSink ?? defaultErrorSink;
+  const onIteratorBacklog = options.onIteratorBacklog;
 
   const publish = <K extends keyof TEventMap & string>(name: K, payload: TEventMap[K]): void => {
     const handlers = subscribers.get(name);
@@ -86,6 +93,8 @@ export const createEventBus = <TEventMap extends Record<string, unknown>>(
     const queue: TEventMap[K][] = [];
     let resolveNext: (() => void) | null = null;
     let done = signal.aborted;
+    let firedWarnDepth = false;
+    let firedErrorDepth = false;
 
     const wakeUp = (): void => {
       if (resolveNext === null) return;
@@ -94,9 +103,26 @@ export const createEventBus = <TEventMap extends Record<string, unknown>>(
       r();
     };
 
+    const reportBacklog = (depth: number): void => {
+      if (onIteratorBacklog === undefined) return;
+      try {
+        onIteratorBacklog(depth, name);
+      } catch (err) {
+        errorSink(err, name);
+      }
+    };
+
     const handler: EventHandler<TEventMap[K]> = (payload) => {
       if (done) return;
       queue.push(payload);
+      if (!firedWarnDepth && queue.length >= BACKLOG_WARN_DEPTH) {
+        firedWarnDepth = true;
+        reportBacklog(queue.length);
+      }
+      if (!firedErrorDepth && queue.length >= BACKLOG_ERROR_DEPTH) {
+        firedErrorDepth = true;
+        reportBacklog(queue.length);
+      }
       wakeUp();
     };
 

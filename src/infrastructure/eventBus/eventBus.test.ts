@@ -194,6 +194,114 @@ describe('createEventBus', () => {
     expect(after).toHaveBeenCalledWith(100);
   });
 
+  test('onIteratorBacklog fires once when queue depth first reaches 100', async () => {
+    const backlogs: Array<{ depth: number; event: string }> = [];
+    const bus = createEventBus<TestEvents>({
+      onIteratorBacklog: (depth, event) => backlogs.push({ depth, event }),
+    });
+    const ctrl = new AbortController();
+
+    const iter = bus.iterate('count', { signal: ctrl.signal });
+
+    for (let i = 0; i < 150; i++) bus.publish('count', i);
+    await flushMicrotasks();
+
+    let received = 0;
+    for await (const _ of iter) {
+      received++;
+      if (received === 150) break;
+    }
+
+    expect(backlogs).toHaveLength(1);
+    expect(backlogs[0]).toEqual({ depth: 100, event: 'count' });
+  });
+
+  test('onIteratorBacklog fires a second time when depth reaches 1000', async () => {
+    const backlogs: Array<{ depth: number; event: string }> = [];
+    const bus = createEventBus<TestEvents>({
+      onIteratorBacklog: (depth, event) => backlogs.push({ depth, event }),
+    });
+    const ctrl = new AbortController();
+
+    const iter = bus.iterate('count', { signal: ctrl.signal });
+
+    for (let i = 0; i < 1_200; i++) bus.publish('count', i);
+    await flushMicrotasks();
+
+    let received = 0;
+    for await (const _ of iter) {
+      received++;
+      if (received === 1_200) break;
+    }
+
+    expect(backlogs.map((b) => b.depth)).toEqual([100, 1_000]);
+  });
+
+  test('onIteratorBacklog stays silent when depth never reaches the threshold', async () => {
+    const backlogs: number[] = [];
+    const bus = createEventBus<TestEvents>({
+      onIteratorBacklog: (depth) => backlogs.push(depth),
+    });
+    const ctrl = new AbortController();
+
+    const iter = bus.iterate('count', { signal: ctrl.signal });
+
+    for (let i = 0; i < 99; i++) bus.publish('count', i);
+    await flushMicrotasks();
+
+    let received = 0;
+    for await (const _ of iter) {
+      received++;
+      if (received === 99) break;
+    }
+
+    expect(backlogs).toEqual([]);
+  });
+
+  test('iterate works without an onIteratorBacklog callback', async () => {
+    const bus = createEventBus<TestEvents>();
+    const ctrl = new AbortController();
+
+    const iter = bus.iterate('count', { signal: ctrl.signal });
+    for (let i = 0; i < 150; i++) bus.publish('count', i);
+    await flushMicrotasks();
+
+    let received = 0;
+    for await (const _ of iter) {
+      received++;
+      if (received === 150) break;
+    }
+    expect(received).toBe(150);
+  });
+
+  test('onIteratorBacklog throws are routed to errorSink', async () => {
+    const errors: Array<{ name: string; message: string }> = [];
+    const bus = createEventBus<TestEvents>({
+      errorSink: (err, name) => {
+        errors.push({
+          name,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      },
+      onIteratorBacklog: () => {
+        throw new Error('backlog handler boom');
+      },
+    });
+    const ctrl = new AbortController();
+
+    const iter = bus.iterate('count', { signal: ctrl.signal });
+    for (let i = 0; i < 100; i++) bus.publish('count', i);
+    await flushMicrotasks();
+
+    let received = 0;
+    for await (const _ of iter) {
+      received++;
+      if (received === 100) break;
+    }
+
+    expect(errors).toEqual([{ name: 'count', message: 'backlog handler boom' }]);
+  });
+
   test('errorSink is invoked for sync throws and async rejections; other handlers still run', async () => {
     const errors: Array<{ name: string; message: string }> = [];
     const bus = createEventBus<TestEvents>({
