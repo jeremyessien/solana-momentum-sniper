@@ -11,31 +11,32 @@ export type SubscriptionSource = {
 };
 
 export type HeliusAdapter = {
-  readonly subscribeToProgramLogs: (
+  readonly start: (
     programId: string,
     options: {
       readonly signal: AbortSignal;
       readonly commitment?: Commitment;
     },
-  ) => AsyncIterable<ProgramLogEvent>;
+  ) => Promise<void>;
 };
 
 export type HeliusAdapterConfig = {
   readonly source: SubscriptionSource;
   readonly clock: Clock;
   readonly logger: Logger;
+  readonly publishLog: (event: ProgramLogEvent) => void;
 };
 
 const INITIAL_BACKOFF_MS = 1_000;
 const MAX_BACKOFF_MS = 60_000;
 
 export const createHeliusAdapter = (config: HeliusAdapterConfig): HeliusAdapter => {
-  const { source, clock, logger } = config;
+  const { source, clock, logger, publishLog } = config;
 
-  async function* subscribeToProgramLogs(
+  const start = async (
     programId: string,
     options: { readonly signal: AbortSignal; readonly commitment?: Commitment },
-  ): AsyncGenerator<ProgramLogEvent, void, undefined> {
+  ): Promise<void> => {
     const commitment = options.commitment ?? 'confirmed';
     let backoffMs = INITIAL_BACKOFF_MS;
 
@@ -43,7 +44,7 @@ export const createHeliusAdapter = (config: HeliusAdapterConfig): HeliusAdapter 
       try {
         const stream = source.streamLogs(programId, commitment, options.signal);
         for await (const event of stream) {
-          yield event;
+          publishLog(event);
           backoffMs = INITIAL_BACKOFF_MS;
         }
       } catch (err) {
@@ -57,7 +58,7 @@ export const createHeliusAdapter = (config: HeliusAdapterConfig): HeliusAdapter 
         backoffMs = Math.min(backoffMs * 2, MAX_BACKOFF_MS);
       }
     }
-  }
+  };
 
-  return { subscribeToProgramLogs };
+  return { start };
 };
