@@ -1,0 +1,41 @@
+{
+  "_notes": {
+    "captured": "2026-05-11T14:24:20.710Z",
+    "purpose": "Pump.fun Sell TradeEvent captured live for parser test coverage."
+  },
+  "transaction": {
+    "signature": "3FhqyvvrFoBG78YiWAwDMsmTgqujH1SpgcB32DBcy3nY9zQgzc5rDwjyT15gyWeZxCjC3tWuPgLMpXYHQW1KCvur",
+    "slot": "419057703",
+    "logs": [
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program ComputeBudget111111111111111111111111111111 invoke [1]",
+      "Program ComputeBudget111111111111111111111111111111 success",
+      "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P invoke [1]",
+      "Program log: Instruction: Sell",
+      "Program pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ invoke [2]",
+      "Program log: Instruction: GetFees",
+      "Program pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ consumed 3136 of 54067 compute units",
+      "Program return: pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ AAAAAAAAAABfAAAAAAAAAB4AAAAAAAAA",
+      "Program pfeeUxB6jkeY1Hxd7CsFCAjcbHA9rWtchMGdZ6VojVZ success",
+      "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb invoke [2]",
+      "Program log: Instruction: TransferChecked",
+      "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb consumed 2475 of 47236 compute units",
+      "Program TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb success",
+      "Program data: vdt/007mYe7LHCw31GEDjyN089cLt4b6SCwKqMQga/wHW/PHWJ84PwKz/gAAAAAA+23Q7lYAAAAAvrAr3uEGhNGuN7LQHNKZ+AeIlT51SOxnjWA/mC0CkxWP5gFqAAAAABzcndQIAAAAQe0/c+wDAwAcMHrYAQAAAEFVLSdbBQIASsL40N1cvJfjKJwZfLUGKlTz2Va5zm5RFfllZ6pcs+ZfAAAAAAAAAG5rAgAAAAAAOvNOxoPJD3axf5jqvuJA7PaKOoHM1abHp8+Q8Kcu+MQeAAAAAAAAAJzDAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAHNlbGwAAAAAAAAAAAAAAAAAAAAAAIgTAAAAAAAAtzUBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACs/4AAAAAABzcndQIAAAAHDB62AEAAAA=",
+      "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P invoke [2]",
+      "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P consumed 2087 of 35047 compute units",
+      "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P success",
+      "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P consumed 54134 of 86039 compute units",
+      "Program 6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P success",
+      "Program troyXT7Ty3s2rjJe4bqWaroUrS4Fjd8rbHHNHxcACF4 invoke [1]",
+      "Program log: Instruction: FeeTransferWithTip",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program 11111111111111111111111111111111 invoke [2]",
+      "Program 11111111111111111111111111111111 success",
+      "Program troyXT7Ty3s2rjJe4bqWaroUrS4Fjd8rbHHNHxcACF4 consumed 5873 of 31905 compute units",
+      "Program troyXT7Ty3s2rjJe4bqWaroUrS4Fjd8rbHHNHxcACF4 success"
+    ]
+  }
+}

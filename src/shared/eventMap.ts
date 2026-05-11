@@ -1,5 +1,7 @@
 import type { DetectedToken } from './detectedToken.js';
 import type { ProgramLogEvent } from './programLogEvent.js';
+import type { TokenTrackingClosed } from './tokenTrackingClosed.js';
+import type { TokenTradeObserved } from './tokenTradeObserved.js';
 import type { TokenWithFullContext } from './tokenWithFullContext.js';
 
 /**
@@ -14,4 +16,6 @@ export type EventMap = {
   readonly rawProgramLogReceived: ProgramLogEvent;
   readonly newTokenLaunchDetected: DetectedToken;
   readonly tokenAnalysisCompleted: TokenWithFullContext;
+  readonly tokenTradeObserved: TokenTradeObserved;
+  readonly tokenTrackingClosed: TokenTrackingClosed;
 };

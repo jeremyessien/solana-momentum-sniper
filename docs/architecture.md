@@ -32,9 +32,9 @@ This approach has one significant cost. The adapter layer requires careful inter
 
 ---
 
-## Part Three: The Seven Modules
+## Part Three: The Eight Modules
 
-The system inside our boundary is organized into seven modules. Each module has one reason to change, one clear responsibility, and clear interfaces with its neighbors. The modules are described below in roughly the order they appear in the data flow.
+The system inside our boundary is organized into eight modules. Each module has one reason to change, one clear responsibility, and clear interfaces with its neighbors. The modules are described below in roughly the order they appear in the data flow.
 
 ### The Infrastructure Layer
 
@@ -61,6 +61,16 @@ The reason enrichment is its own module is that the axis of change is "what stat
 The output type carries the full raw JSON of each source response alongside the parsed snapshot, so future analytical work can mine fields that weren't part of the initial parse. This matches the Phase 1 observability framing: capture rich data first, decide what's predictive from real data later.
 
 Each external call is bounded by a per-source timeout and threaded with the parent shutdown signal so clean shutdown cancels in-flight requests. There is no scheduler or shared queue — Node's event loop handles concurrency naturally as one async task per detected token. At Pump.fun's launch rate the in-flight memory pressure is negligible.
+
+### The Activity Tracker
+
+The activity tracker is enrichment's behavioural counterpart. Where enrichment captures the static configuration of a token at the moment of detection (mint authority, holder list, creator allocation), the activity tracker watches what happens to the token in the seconds and minutes after launch — every buy, every sell, every creator transfer, and the eventual graduation event when the bonding curve completes. Its output is a stream of `TokenTradeObserved` events per trade and one `TokenTrackingClosed` event when tracking ends for a given mint (either because the token graduated or because a max-age safety timeout fired).
+
+The reason this is its own module is that the axis of change is "what behavioural signals matter and how we summarise them," which evolves independently of the static enrichment sources. The activity tracker does not call external services. It subscribes to the same Pump.fun program log stream the detection layer already consumes, parses the `TradeEvent` and `CompleteEvent` payloads emitted by the on-chain program, and routes matched events to per-mint state held in an in-memory map. State is dropped when tracking closes.
+
+The activity tracker is the most stateful module in the system. Each detected token gets an entry in the tracking map, accumulates per-trade counts and trader identities, and is dismissed on a defined terminal condition. To handle the common case where a Pump.fun creator bundles a Create instruction and a Buy instruction into the same transaction — verified empirically to occur in roughly 45% of launches — the tracker also keeps a small bounded buffer of trades observed for mints we have not yet seen a detection for. When the corresponding `NewTokenLaunchDetected` event arrives, any matching buffered trades are replayed into the freshly created state record so the creator's initial buy is not silently dropped. The buffer has both a time-based age cap and a size cap to prevent unbounded growth.
+
+The tracker uses a 30-minute max-age timeout as a safety bound on tokens that never graduate and never go inactive. This is a starting estimate and is expected to be tuned from operational data.
 
 ### The Strategy Layer
 
@@ -123,6 +133,10 @@ When a new token is detected on any monitored launchpad, the detection layer pub
 When the enrichment layer completes its analysis of a detected token, it publishes a `TokenAnalysisCompleted` event. The payload is a `TokenWithFullContext` value containing the original detected token plus all the gathered data. The strategy layer subscribes to this event to evaluate the candidate. The data store subscribes to persist the enriched candidate for later analysis.
 
 When enrichment fails so completely that the candidate cannot be evaluated, the enrichment layer publishes a `TokenAnalysisFailed` event with a `FailedAnalysisReport` payload describing what went wrong. This is rare and indicates an external service problem. The interface layer may subscribe to alert the user when these failures become frequent.
+
+When the activity tracker observes a Pump.fun buy or sell for a token it is currently tracking, it publishes a `TokenTradeObserved` event. The payload is a `TokenTradeObserved` value containing the token's internal ID and mint, the trader's wallet, whether the trade was a buy or a sell, the SOL and token amounts, the bonding curve's virtual reserves at the time of the trade, the slot, the transaction signature, the observation timestamp, and the Pump.fun-emitted timestamp from the on-chain event. The data store subscribes to persist every trade. The strategy layer may subscribe to act on behavioural signals.
+
+When the activity tracker stops watching a token — either because the bonding curve completed (graduation) or because the max-age safety timeout fired — it publishes a `TokenTrackingClosed` event. The payload contains aggregate counts (trade count, buy count, sell count, unique traders, whether the creator traded during tracking) and the slots of the first and last observed trades. The data store subscribes to persist the closing summary alongside the per-trade records. The reason field discriminates between `'graduated'` and `'timeout'` so post-hoc analysis can separate the two failure modes.
 
 When a strategy evaluates a candidate, it publishes a `StrategyDecisionRecorded` event regardless of the decision. The payload is a `StrategyEvaluationResult` value containing the strategy identifier, the candidate it evaluated, and the decision made. This event captures all decisions, including the many "pass" decisions that do not result in trades. The data store subscribes to record every decision for later analysis. Tracking pass decisions is critical because the negative space is informative. We learn as much from understanding why strategies declined to trade as from understanding their entries.
 
