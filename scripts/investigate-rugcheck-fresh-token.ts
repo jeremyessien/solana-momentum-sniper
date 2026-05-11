@@ -7,6 +7,7 @@ import { createHeliusAdapter } from '../src/infrastructure/helius/heliusAdapter.
 import { createKitSubscriptionSource } from '../src/infrastructure/helius/kitSubscriptionSource.js';
 import { createLogger } from '../src/infrastructure/logger/logger.js';
 import type { EventMap } from '../src/shared/eventMap.js';
+import { RUGCHECK_API_BASE_URL } from '../src/shared/externalApis.js';
 import { PUMP_FUN_PROGRAM_ID } from '../src/shared/launchpadPrograms.js';
 
 const CAPTURE_TIMEOUT_MS = 30_000;
@@ -17,7 +18,7 @@ const BODY_PREVIEW_BYTES = 2_000;
 const probeRugcheck = async (
   mint: string,
 ): Promise<{ status: number; preview: string; bodySize: number }> => {
-  const res = await fetch(`https://api.rugcheck.xyz/v1/tokens/${mint}/report`, {
+  const res = await fetch(`${RUGCHECK_API_BASE_URL}/tokens/${mint}/report`, {
     signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
   });
   const body = await res.text();

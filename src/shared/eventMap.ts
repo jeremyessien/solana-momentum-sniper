@@ -1,5 +1,6 @@
 import type { DetectedToken } from './detectedToken.js';
 import type { ProgramLogEvent } from './programLogEvent.js';
+import type { TokenWithFullContext } from './tokenWithFullContext.js';
 
 /**
  * Central registry of all events that flow through the event bus.
@@ -12,4 +13,5 @@ import type { ProgramLogEvent } from './programLogEvent.js';
 export type EventMap = {
   readonly rawProgramLogReceived: ProgramLogEvent;
   readonly newTokenLaunchDetected: DetectedToken;
+  readonly tokenAnalysisCompleted: TokenWithFullContext;
 };
