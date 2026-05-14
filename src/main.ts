@@ -7,17 +7,53 @@ import { loadConfig } from './infrastructure/config/configLoader.js';
 import { createEventBus } from './infrastructure/eventBus/eventBus.js';
 import { createHeliusAdapter } from './infrastructure/helius/heliusAdapter.js';
 import { createKitSubscriptionSource } from './infrastructure/helius/kitSubscriptionSource.js';
-import { createLogger } from './infrastructure/logger/logger.js';
+import { createLogger, type Logger } from './infrastructure/logger/logger.js';
 import { createRugCheckClient } from './infrastructure/rugcheck/rugCheckClient.js';
 import {
   createGrammyBotApi,
   createTelegramClient,
+  type TelegramClient,
 } from './infrastructure/telegram/telegramClient.js';
 import { wireTelegramNotifications } from './interface/wireTelegramNotifications.js';
 import type { EventMap } from './shared/eventMap.js';
 import { PUMP_FUN_PROGRAM_ID } from './shared/launchpadPrograms.js';
 
 const SHUTDOWN_GOODBYE_TIMEOUT_MS = 5_000;
+const STARTUP_SEND_TIMEOUT_MS = 5_000;
+const FATAL_ALERT_TIMEOUT_MS = 2_000;
+
+let activeLogger: Logger | null = null;
+let activeTelegramClient: TelegramClient | null = null;
+
+const handleFatal = async (label: string, err: Error): Promise<void> => {
+  if (activeLogger !== null) {
+    activeLogger.fatal({ err: err.message, stack: err.stack }, label);
+  } else {
+    console.error(`FATAL [${label}]:`, err);
+  }
+  if (activeTelegramClient !== null) {
+    try {
+      await Promise.race([
+        activeTelegramClient.sendMessage(`🚨 <b>moonscout fatal: ${label}</b>`),
+        new Promise<void>((resolve) => setTimeout(resolve, FATAL_ALERT_TIMEOUT_MS)),
+      ]);
+    } catch (alertErr) {
+      if (activeLogger !== null) {
+        const msg = alertErr instanceof Error ? alertErr.message : String(alertErr);
+        activeLogger.error({ alertErr: msg }, 'fatal alert send rejected unexpectedly');
+      }
+    }
+  }
+  process.exit(1);
+};
+
+process.on('uncaughtException', (err: Error) => {
+  void handleFatal('uncaughtException', err);
+});
+process.on('unhandledRejection', (reason: unknown) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  void handleFatal('unhandledRejection', err);
+});
 
 const main = async (): Promise<void> => {
   const cfgResult = loadConfig();
@@ -31,6 +67,7 @@ const main = async (): Promise<void> => {
     level: config.LOG_LEVEL,
     isDevelopment: config.NODE_ENV !== 'production',
   });
+  activeLogger = logger;
 
   logger.info('moonscout starting');
 
@@ -58,6 +95,7 @@ const main = async (): Promise<void> => {
     recipientChatId,
     logger,
   });
+  activeTelegramClient = telegramClient;
 
   let botUsername: string;
   try {
@@ -71,7 +109,10 @@ const main = async (): Promise<void> => {
     process.exit(1);
   }
 
-  await telegramClient.sendMessage(`🟢 <b>moonscout started</b>\n<b>Bot:</b> @${botUsername}`);
+  await Promise.race([
+    telegramClient.sendMessage(`🟢 <b>moonscout started</b>\n<b>Bot:</b> @${botUsername}`),
+    new Promise<void>((resolve) => setTimeout(resolve, STARTUP_SEND_TIMEOUT_MS)),
+  ]);
 
   const rugcheckClient = createRugCheckClient({ clock });
 
@@ -116,6 +157,7 @@ const main = async (): Promise<void> => {
     subscribeToAnalysisCompleted: (h) => eventBus.subscribe('tokenAnalysisCompleted', h),
     subscribeToTrackingClosed: (h) => eventBus.subscribe('tokenTrackingClosed', h),
     telegramClient,
+    clock,
     logger,
     signal: ctrl.signal,
   });
