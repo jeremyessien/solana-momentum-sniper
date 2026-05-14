@@ -261,6 +261,68 @@ describe('wireEnrichment', () => {
     expect(warnFn).toHaveBeenCalledTimes(1);
   });
 
+  test('includes httpStatus in the warn log when the failure is http_error', async () => {
+    const handlers: Array<(t: DetectedToken) => void | Promise<void>> = [];
+    const warnFn = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      warn: warnFn,
+      debug: vi.fn(),
+      error: vi.fn(),
+      level: 'info',
+    } as unknown as Logger;
+
+    wireEnrichment({
+      subscribeToDetectedTokens: (h) => {
+        handlers.push(h);
+        return () => {};
+      },
+      publishAnalysisCompleted: () => {},
+      rugcheckClient: stubClient(err({ kind: 'http_error', status: 503 })),
+      clock: makeClock(),
+      logger,
+      signal: new AbortController().signal,
+    });
+    await handlers[0]?.(sampleToken());
+
+    expect(warnFn).toHaveBeenCalledTimes(1);
+    const callArgs = warnFn.mock.calls[0];
+    expect(callArgs?.[0]).toMatchObject({
+      reason: 'http_error',
+      httpStatus: 503,
+    });
+  });
+
+  test('omits httpStatus from the warn log for non-http failures', async () => {
+    const handlers: Array<(t: DetectedToken) => void | Promise<void>> = [];
+    const warnFn = vi.fn();
+    const logger = {
+      info: vi.fn(),
+      warn: warnFn,
+      debug: vi.fn(),
+      error: vi.fn(),
+      level: 'info',
+    } as unknown as Logger;
+
+    wireEnrichment({
+      subscribeToDetectedTokens: (h) => {
+        handlers.push(h);
+        return () => {};
+      },
+      publishAnalysisCompleted: () => {},
+      rugcheckClient: stubClient(err({ kind: 'timeout' })),
+      clock: makeClock(),
+      logger,
+      signal: new AbortController().signal,
+    });
+    await handlers[0]?.(sampleToken());
+
+    expect(warnFn).toHaveBeenCalledTimes(1);
+    const callArgs = warnFn.mock.calls[0];
+    expect(callArgs?.[0]).toMatchObject({ reason: 'timeout' });
+    expect((callArgs?.[0] as { httpStatus?: number }).httpStatus).toBeUndefined();
+  });
+
   test('integration: publishes tokenAnalysisCompleted on a real event bus', async () => {
     const bus = createEventBus<EventMap>();
     const received: TokenWithFullContext[] = [];

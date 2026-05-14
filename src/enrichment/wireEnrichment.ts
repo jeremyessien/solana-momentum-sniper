@@ -50,6 +50,7 @@ export const wireEnrichment = (deps: WireEnrichmentDeps): void => {
           mint: token.mint,
           internalId: token.internalId,
           reason: result.error.kind,
+          httpStatus: result.error.kind === 'http_error' ? result.error.status : undefined,
         },
         'rugcheck analysis failed',
       );
