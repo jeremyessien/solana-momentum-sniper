@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { wireActivityTracker } from './activity/wireActivityTracker.js';
 import { wireDetection } from './detection/wireDetection.js';
 import { wireEnrichment } from './enrichment/wireEnrichment.js';
@@ -9,6 +11,9 @@ import { createHeliusAdapter } from './infrastructure/helius/heliusAdapter.js';
 import { createKitSubscriptionSource } from './infrastructure/helius/kitSubscriptionSource.js';
 import { createLogger, type Logger } from './infrastructure/logger/logger.js';
 import { createRugCheckClient } from './infrastructure/rugcheck/rugCheckClient.js';
+import { scheduleDailyPrune } from './infrastructure/store/dailyPrune.js';
+import { createSqliteEventStore } from './infrastructure/store/eventStore.js';
+import { wireStore } from './infrastructure/store/wireStore.js';
 import {
   createGrammyBotApi,
   createTelegramClient,
@@ -116,6 +121,37 @@ const main = async (): Promise<void> => {
 
   const rugcheckClient = createRugCheckClient({ clock });
 
+  if (config.NODE_ENV === 'test' && config.DATABASE_PATH !== ':memory:') {
+    logger.error(
+      { path: config.DATABASE_PATH },
+      'refusing to open file-backed DB under NODE_ENV=test',
+    );
+    process.exit(1);
+  }
+  if (config.DATABASE_PATH !== ':memory:') {
+    mkdirSync(dirname(config.DATABASE_PATH), { recursive: true });
+  }
+  const eventStore = createSqliteEventStore({ path: config.DATABASE_PATH, logger });
+  logger.info({ path: config.DATABASE_PATH }, 'event store opened');
+
+  wireStore({
+    subscribeToDetectedTokens: (h) => eventBus.subscribe('newTokenLaunchDetected', h),
+    subscribeToAnalysisCompleted: (h) => eventBus.subscribe('tokenAnalysisCompleted', h),
+    subscribeToTradeObserved: (h) => eventBus.subscribe('tokenTradeObserved', h),
+    subscribeToTrackingClosed: (h) => eventBus.subscribe('tokenTrackingClosed', h),
+    eventStore,
+    logger,
+    signal: ctrl.signal,
+  });
+
+  scheduleDailyPrune({
+    eventStore,
+    retentionMs: config.TRADE_RETENTION_DAYS * 24 * 60 * 60 * 1000,
+    clock,
+    logger,
+    signal: ctrl.signal,
+  });
+
   const wsUrl = `wss://mainnet.helius-rpc.com/?api-key=${config.HELIUS_API_KEY}`;
   const adapter = createHeliusAdapter({
     source: createKitSubscriptionSource(wsUrl),
@@ -180,6 +216,14 @@ const main = async (): Promise<void> => {
     telegramClient.sendMessage('🔴 <b>moonscout stopped</b>'),
     new Promise<void>((resolve) => setTimeout(resolve, SHUTDOWN_GOODBYE_TIMEOUT_MS)),
   ]);
+  try {
+    eventStore.close();
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      'event store close failed',
+    );
+  }
   logger.info('shutdown complete');
 };
 
