@@ -171,6 +171,8 @@ const main = async (): Promise<void> => {
 
   wireEnrichment({
     subscribeToDetectedTokens: (h) => eventBus.subscribe('newTokenLaunchDetected', h),
+    subscribeToTradeObserved: (h) => eventBus.subscribe('tokenTradeObserved', h),
+    subscribeToTrackingClosed: (h) => eventBus.subscribe('tokenTrackingClosed', h),
     publishAnalysisCompleted: (a) => eventBus.publish('tokenAnalysisCompleted', a),
     rugcheckClient,
     clock,
