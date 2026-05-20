@@ -1,0 +1,26 @@
+[Unit]
+Description=Moonscout trading bot
+After=moonscout-litestream.service network-online.target
+Requires=moonscout-litestream.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=moonscout
+Group=moonscout
+WorkingDirectory=/opt/moonscout
+ExecStart=/usr/bin/node /opt/moonscout/dist/main.js
+EnvironmentFile=/etc/moonscout/bot.env
+
+Restart=on-failure
+RestartSec=10
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitCORE=0
+ReadWritePaths=/var/lib/moonscout
+
+[Install]
+WantedBy=multi-user.target

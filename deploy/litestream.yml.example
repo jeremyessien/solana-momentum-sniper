@@ -1,0 +1,12 @@
+# Copy to /etc/litestream.yml on the server. Replace <BUCKET> and <REGION>.
+# Credentials are loaded from /etc/moonscout/litestream.env via systemd.
+
+dbs:
+  - path: /var/lib/moonscout/moonscout.db
+    replicas:
+      - type: s3
+        bucket: <BUCKET>
+        path: moonscout
+        region: <REGION>
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
