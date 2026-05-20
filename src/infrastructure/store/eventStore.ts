@@ -2,6 +2,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Database from 'better-sqlite3';
 import type { DetectedToken } from '../../shared/detectedToken.js';
+import type { StrategyEvaluationResult } from '../../shared/strategyEvaluationResult.js';
 import type { TokenTrackingClosed } from '../../shared/tokenTrackingClosed.js';
 import type { TokenTradeObserved } from '../../shared/tokenTradeObserved.js';
 import type { TokenWithFullContext } from '../../shared/tokenWithFullContext.js';
@@ -17,6 +18,7 @@ export type EventStore = {
   readonly recordAnalysisCompleted: (event: TokenWithFullContext) => void;
   readonly recordTradeObserved: (event: TokenTradeObserved) => void;
   readonly recordTrackingClosed: (event: TokenTrackingClosed) => void;
+  readonly recordStrategyDecision: (event: StrategyEvaluationResult) => void;
   readonly pruneTradesOlderThan: (cutoffMs: bigint, chunkSize?: number) => PruneResult;
   readonly close: () => void;
 };
@@ -35,6 +37,7 @@ const eventTypeOf = {
   detection: 'newTokenLaunchDetected',
   analysis: 'tokenAnalysisCompleted',
   trackingClosed: 'tokenTrackingClosed',
+  strategyDecision: 'strategyDecisionRecorded',
 } as const;
 
 const enrichmentStatusOf = (analysis: TokenWithFullContext): 'completed' | 'failed' =>
@@ -77,6 +80,12 @@ export const createSqliteEventStore = (deps: CreateSqliteEventStoreDeps): EventS
   const updateTrackedTokenOnTrackingClosed = db.prepare(`
     UPDATE tracked_tokens
        SET tracking_status = ?, closed_at_ms = ?, last_event_seq = ?
+     WHERE token_internal_id = ?
+  `);
+
+  const updateTrackedTokenLastEventSeq = db.prepare(`
+    UPDATE tracked_tokens
+       SET last_event_seq = ?
      WHERE token_internal_id = ?
   `);
 
@@ -130,6 +139,19 @@ export const createSqliteEventStore = (deps: CreateSqliteEventStoreDeps): EventS
     updateTrackedTokenOnTrackingClosed.run(event.reason, occurredAtMs, seq, event.tokenInternalId);
   });
 
+  const recordStrategyDecision = db.transaction((event: StrategyEvaluationResult): void => {
+    const tokenInternalId = event.candidate.detected.internalId;
+    const occurredAtMs = BigInt(event.evaluatedAt.getTime());
+    const info = insertLifecycle.run(
+      occurredAtMs,
+      eventTypeOf.strategyDecision,
+      tokenInternalId,
+      stringifyPayload(event),
+    );
+    const seq = BigInt(info.lastInsertRowid);
+    updateTrackedTokenLastEventSeq.run(seq, tokenInternalId);
+  });
+
   const recordTradeObserved = (event: TokenTradeObserved): void => {
     insertTrade.run(
       BigInt(event.observedAt.getTime()),
@@ -176,6 +198,7 @@ export const createSqliteEventStore = (deps: CreateSqliteEventStoreDeps): EventS
     recordAnalysisCompleted,
     recordTradeObserved,
     recordTrackingClosed,
+    recordStrategyDecision,
     pruneTradesOlderThan,
     close,
   };

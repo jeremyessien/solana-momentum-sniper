@@ -3,6 +3,7 @@ import { describe, expect, test, vi } from 'vitest';
 import type { DetectedToken } from '../../shared/detectedToken.js';
 import { ok } from '../../shared/result.js';
 import type { RugCheckSnapshot } from '../../shared/rugCheckSnapshot.js';
+import type { StrategyEvaluationResult } from '../../shared/strategyEvaluationResult.js';
 import type { TokenTrackingClosed } from '../../shared/tokenTrackingClosed.js';
 import type { TokenTradeObserved } from '../../shared/tokenTradeObserved.js';
 import type { TokenWithFullContext } from '../../shared/tokenWithFullContext.js';
@@ -16,6 +17,7 @@ type Subscribers = {
   analyzed: ((a: TokenWithFullContext) => void) | null;
   trade: ((t: TokenTradeObserved) => void) | null;
   closed: ((c: TokenTrackingClosed) => void) | null;
+  strategy: ((d: StrategyEvaluationResult) => void) | null;
 };
 
 const createSubscribers = (): {
@@ -25,9 +27,16 @@ const createSubscribers = (): {
     subscribeToAnalysisCompleted: (h: (a: TokenWithFullContext) => void) => () => void;
     subscribeToTradeObserved: (h: (t: TokenTradeObserved) => void) => () => void;
     subscribeToTrackingClosed: (h: (c: TokenTrackingClosed) => void) => () => void;
+    subscribeToStrategyDecision: (h: (d: StrategyEvaluationResult) => void) => () => void;
   };
 } => {
-  const subs: Subscribers = { detected: null, analyzed: null, trade: null, closed: null };
+  const subs: Subscribers = {
+    detected: null,
+    analyzed: null,
+    trade: null,
+    closed: null,
+    strategy: null,
+  };
   return {
     subs,
     wireDeps: {
@@ -55,6 +64,12 @@ const createSubscribers = (): {
           subs.closed = null;
         };
       },
+      subscribeToStrategyDecision: (h) => {
+        subs.strategy = h;
+        return () => {
+          subs.strategy = null;
+        };
+      },
     },
   };
 };
@@ -64,8 +79,26 @@ const fakeEventStore = (): EventStore => ({
   recordAnalysisCompleted: vi.fn(),
   recordTradeObserved: vi.fn(),
   recordTrackingClosed: vi.fn(),
+  recordStrategyDecision: vi.fn(),
   pruneTradesOlderThan: vi.fn().mockReturnValue({ rowsDeleted: 0 }),
   close: vi.fn(),
+});
+
+const exampleStrategyDecision = (): StrategyEvaluationResult => ({
+  strategyId: 'data-collection',
+  candidate: {
+    detected: exampleDetection(),
+    analyzedAt: new Date(0),
+    rugcheck: ok({} as RugCheckSnapshot),
+  },
+  thresholds: {
+    enterMaxScoreNormalised: 30,
+    enterMaxTopHolderPercent: 20,
+    watchMaxScoreNormalised: 60,
+    watchMaxTopHolderPercent: 30,
+  },
+  decision: { kind: 'enter' },
+  evaluatedAt: new Date(0),
 });
 
 const exampleDetection = (): DetectedToken => ({
@@ -125,15 +158,19 @@ describe('wireStore', () => {
     const trade = exampleTrade();
     const closed = exampleClosed();
 
+    const strategy = exampleStrategyDecision();
+
     subs.detected?.(detection);
     subs.analyzed?.(analysis);
     subs.trade?.(trade);
     subs.closed?.(closed);
+    subs.strategy?.(strategy);
 
     expect(eventStore.recordDetection).toHaveBeenCalledWith(detection);
     expect(eventStore.recordAnalysisCompleted).toHaveBeenCalledWith(analysis);
     expect(eventStore.recordTradeObserved).toHaveBeenCalledWith(trade);
     expect(eventStore.recordTrackingClosed).toHaveBeenCalledWith(closed);
+    expect(eventStore.recordStrategyDecision).toHaveBeenCalledWith(strategy);
   });
 
   test('does not subscribe if signal is already aborted', () => {
@@ -148,6 +185,7 @@ describe('wireStore', () => {
     expect(subs.analyzed).toBeNull();
     expect(subs.trade).toBeNull();
     expect(subs.closed).toBeNull();
+    expect(subs.strategy).toBeNull();
   });
 
   test('unsubscribes all subscriptions on abort', () => {
@@ -163,6 +201,7 @@ describe('wireStore', () => {
     expect(subs.analyzed).toBeNull();
     expect(subs.trade).toBeNull();
     expect(subs.closed).toBeNull();
+    expect(subs.strategy).toBeNull();
   });
 
   test('store errors do not propagate; they are logged and swallowed', () => {

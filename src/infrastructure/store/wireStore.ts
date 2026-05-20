@@ -1,4 +1,5 @@
 import type { DetectedToken } from '../../shared/detectedToken.js';
+import type { StrategyEvaluationResult } from '../../shared/strategyEvaluationResult.js';
 import type { TokenTrackingClosed } from '../../shared/tokenTrackingClosed.js';
 import type { TokenTradeObserved } from '../../shared/tokenTradeObserved.js';
 import type { TokenWithFullContext } from '../../shared/tokenWithFullContext.js';
@@ -17,11 +18,16 @@ export type SubscribeToTrackingClosed = (
   handler: (closed: TokenTrackingClosed) => void,
 ) => () => void;
 
+export type SubscribeToStrategyDecision = (
+  handler: (decision: StrategyEvaluationResult) => void,
+) => () => void;
+
 export type WireStoreDeps = {
   readonly subscribeToDetectedTokens: SubscribeToDetectedTokens;
   readonly subscribeToAnalysisCompleted: SubscribeToAnalysisCompleted;
   readonly subscribeToTradeObserved: SubscribeToTradeObserved;
   readonly subscribeToTrackingClosed: SubscribeToTrackingClosed;
+  readonly subscribeToStrategyDecision: SubscribeToStrategyDecision;
   readonly eventStore: EventStore;
   readonly logger: Logger;
   readonly signal: AbortSignal;
@@ -73,16 +79,27 @@ export const wireStore = (deps: WireStoreDeps): void => {
     );
   };
 
+  const onStrategyDecision = (decision: StrategyEvaluationResult): void => {
+    recordSafely(
+      deps.eventStore.recordStrategyDecision,
+      decision,
+      'strategyDecision',
+      decision.candidate.detected.internalId,
+    );
+  };
+
   const unsubscribeDetected = deps.subscribeToDetectedTokens(onDetected);
   const unsubscribeAnalyzed = deps.subscribeToAnalysisCompleted(onAnalyzed);
   const unsubscribeTrade = deps.subscribeToTradeObserved(onTrade);
   const unsubscribeClosed = deps.subscribeToTrackingClosed(onClosed);
+  const unsubscribeStrategy = deps.subscribeToStrategyDecision(onStrategyDecision);
 
   const cleanup = (): void => {
     unsubscribeDetected();
     unsubscribeAnalyzed();
     unsubscribeTrade();
     unsubscribeClosed();
+    unsubscribeStrategy();
   };
 
   deps.signal.addEventListener('abort', cleanup, { once: true });
