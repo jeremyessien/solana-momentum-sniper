@@ -1,0 +1,23 @@
+[Unit]
+Description=Moonscout SQLite replication via Litestream
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=moonscout
+Group=moonscout
+ExecStart=/usr/bin/litestream replicate -config /etc/litestream.yml
+EnvironmentFile=/etc/moonscout/litestream.env
+
+# No Restart=: failures must surface to the operator (ADR-008).
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitCORE=0
+ReadWritePaths=/var/lib/moonscout
+
+[Install]
+WantedBy=multi-user.target
