@@ -116,7 +116,7 @@ In Phase 1 the interface layer is outbound-only — it subscribes to `NewTokenLa
 
 ## Part Four: How Modules Communicate
 
-The seven modules described above do not call each other directly. Instead, they communicate through an event bus that lives in the infrastructure layer. Modules publish events describing things that have happened, and other modules subscribe to the events they care about. This is the event-driven architecture pattern, and it is the central organizing principle of how data flows through the system.
+The eight modules described above do not call each other directly. Instead, they communicate through an event bus that lives in the infrastructure layer. Modules publish events describing things that have happened, and other modules subscribe to the events they care about. This is the event-driven architecture pattern, and it is the central organizing principle of how data flows through the system.
 
 The motivation for the event bus is loose coupling. In a direct-call architecture, the detection layer would have to know that the enrichment layer exists in order to hand candidates to it. The enrichment layer would have to know about the strategy layer. Each module becomes coupled to its downstream neighbor, and adding a new consumer of any data requires modifying the producing module. With an event bus, each module knows only about events. The detection layer publishes a "new token launched" event without caring who is listening. Enrichment subscribes to that event because it cares about new tokens. If we later want to add a debug logger that records every detected token, we add a new subscriber without modifying anything else.
 
