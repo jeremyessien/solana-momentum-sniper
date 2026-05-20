@@ -1,0 +1,123 @@
+# ADR 008: Operational Security
+
+## Status
+
+Accepted, 20 May 2026. This decision precedes the Hetzner deployment and is referenced by ADR-001 (Wallet and Key Management) and ADR-005 (Data Store and Persistence), both of which explicitly deferred the operational details of the production environment to this document. After any deployment begins depending on this ADR, future changes will be handled by superseding ADRs rather than by editing this document, in keeping with the convention that accepted ADRs preserve their historical record.
+
+## Context
+
+The bot has been built and tested entirely on the developer's local Mac to date. Phase 1 closeout requires moving it to a production environment that runs unattended for weeks to produce the observation data the strategy module exists to generate. Two earlier ADRs flagged operational security as a hard requirement that must be specified before the bot reaches a server.
+
+ADR-001 places the entire security model for the wallet on the operational discipline of the deployment server: the Solana private key is loaded from a `.env` file at process startup, held in memory by the wallet adapter, and never persisted to disk in any other form. If the server itself is compromised, the key is compromised. ADR-001 is defensible only because the operational ADR specifies the host hardening that makes server compromise unlikely. ADR-005 similarly specifies that the bot and Litestream run as sibling systemd units under an unprivileged user, with the data store at a path owned by that user and Litestream's S3 credentials loaded from the same `.env` file.
+
+The threat model this ADR addresses is narrow but real. The bot is a single-user Solana trading bot running on a single Hetzner Cloud VPS. It has no inbound traffic except SSH for the operator. The attacks that matter are: SSH brute force (automated background noise), unattended package vulnerabilities (kernel and userland CVEs that accumulate if not patched), privilege escalation from any local process that gets compromised (a hypothetical npm supply-chain hit), exfiltration of the `.env` file (every secret the bot uses), and exfiltration of memory contents via process inspection or core dumps (the running private key). The bot is not a high-value target individually, but the wallet it holds is high-value and an attacker who finds it has direct financial incentive.
+
+The architectural response is layered: a hardened host, minimal exposure, defence in depth, and the operational discipline to keep the layers in place over time. None of the individual measures below are novel; their combination is the baseline a money-handling bot on a public-internet VPS should meet.
+
+## Decision
+
+The production environment is a single Hetzner Cloud instance, Debian 12 (Bookworm), CPX21 plan (3 vCPUs, 4 GB RAM, 80 GB SSD). Debian is chosen over Ubuntu LTS because Debian Stable freezes package versions at release time and ships only security and critical-bug patches, matching the project's existing supply-chain posture (`.npmrc` `minimum-release-age=10080`, exact dependency pins). The CPX21 plan is sized for the Phase 1 load — one persistent WebSocket to Helius, in-process SQLite, in-memory per-mint state maps at Pump.fun launch rates; CPX31 (4 vCPUs, 8 GB) is the upgrade path if observation reveals memory pressure on the state maps.
+
+SSH is hardened to key-only authentication with Ed25519 keys, root login disabled, password authentication disabled, and the operator's user added to a single `AllowUsers` directive. The SSH port stays on 22; non-standard ports are a defensible but optional addition that the operator can adopt later if log noise from automated scanners becomes burdensome. Key generation happens on the operator's local Mac, never on the server; only the public key is copied to the server's `~/.ssh/authorized_keys`.
+
+A dedicated unprivileged Linux user named `moonscout` owns the bot. The user is created with no shell access (`/usr/sbin/nologin`), no home directory shell, no sudo privileges, and no membership in any group other than its own. The bot's working files live under `/var/lib/moonscout/` (database, logs spool) with `moonscout:moonscout` ownership and mode `0750` on the directory. The `.env` file lives at `/etc/moonscout/.env`, owned by `root:moonscout` with mode `0640` so the systemd units can read it but no other unprivileged user on the system can. Deployment of the `.env` file is manual via `scp` from the operator's local machine; it is never checked into git and never appears in any image, snapshot, or backup that leaves the host.
+
+Firewall is defence in depth. The Hetzner Cloud Firewall (configured at the hypervisor, outside the VM, cannot be bypassed by anything inside the VM) is set to allow inbound only on TCP 22 from any source. UFW runs inside the VM as a second layer with the same policy: default-deny inbound, allow SSH only. Outbound is default-allow with no explicit allowlist; the bot needs to reach Helius (wss), RugCheck (https), Telegram (https), Jupiter (https in Phase 2), and AWS S3 (https) — listing these as an outbound allowlist is operationally fiddly and only meaningfully tightens the threat model in the worst-case "the bot itself is compromised" scenario, which is itself defended against by the systemd hardening below. This is a deliberate trade-off and may be revisited if the threat model evolves.
+
+`fail2ban` is installed and configured with the SSH jail enabled. The ban policy is 24-hour bans after 3 failed attempts within 10 minutes — aggressive because the operator has only one trusted IP range and any failure not from that range is by definition hostile traffic. fail2ban is started under systemd and enabled to start on boot.
+
+Unattended security upgrades are enabled via Debian's `unattended-upgrades` package. The configuration is restricted to security updates only (not regular package updates), so the host receives kernel CVE patches and userland security fixes automatically without bringing in feature-update churn. The unattended-upgrades timer is enabled by default; the configuration confirms this. Reboots required for kernel updates are NOT automated — the operator decides when to reboot. The `update-notifier-common` package provides the `/var/run/reboot-required` signal that tells the operator a reboot is pending.
+
+Kernel network hardening via sysctl is applied through a dedicated drop-in at `/etc/sysctl.d/99-moonscout-hardening.conf`. The settings are: `net.ipv4.tcp_syncookies = 1` (SYN flood protection), `net.ipv4.conf.all.rp_filter = 1` and `net.ipv4.conf.default.rp_filter = 1` (reverse path filtering blocks spoofed source addresses), `net.ipv4.conf.all.accept_redirects = 0` and `net.ipv4.conf.all.send_redirects = 0` (ICMP redirect handling disabled to block man-in-the-middle redirects), `net.ipv4.conf.all.accept_source_route = 0` and `net.ipv4.conf.default.accept_source_route = 0` (source-routed packets blocked), `net.ipv4.conf.all.log_martians = 1` (log packets with impossible source addresses). The settings are applied at boot via `sysctl --system`.
+
+Core dumps are disabled at every layer. `systemd-coredump` is configured at `/etc/systemd/coredump.conf.d/disable.conf` with `Storage=none` and `ProcessSizeMax=0`. A sysctl entry sets `kernel.core_pattern=|/bin/false` and `fs.suid_dumpable=0`. The systemd units for the bot and Litestream additionally set `LimitCORE=0` to bound core size to zero from the process side. This is not generic hardening; it is specifically required because the bot's memory contains the Solana private key while the process is running, and a core dump on disk would expose the key to anyone with read access to the dump file. ADR-001's threat model assumes core dumps cannot reach disk; this ADR is the mechanism that delivers that assumption.
+
+Process supervision is two systemd units, one for Litestream and one for the bot. The Litestream unit (`moonscout-litestream.service`) starts first; its `ExecStart` runs `litestream replicate -config /etc/litestream.yml`. The bot unit (`moonscout.service`) has `After=moonscout-litestream.service` and `Requires=moonscout-litestream.service` so that the bot does not run if replication is not also running. Both units run as `User=moonscout Group=moonscout`. Both load environment from `EnvironmentFile=/etc/moonscout/.env`. Both apply the hardening directives `NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, and `LimitCORE=0`. The bot additionally has `ReadWritePaths=/var/lib/moonscout` because `ProtectSystem=strict` mounts everything read-only by default. `Restart=on-failure` with a `RestartSec=10` backoff is set for the bot only — Litestream restart-on-failure can mask configuration drift and is left manual. Both units are enabled to start on boot.
+
+AWS IAM scoping for the S3 replica follows Litestream's own minimum-permissions template. A dedicated IAM user named `moonscout-litestream` is created with no console access and one programmatic access key. The user's only attached policy is a customer-managed policy with the following JSON, where `<BUCKET>` is the project's actual bucket name:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetBucketLocation", "s3:ListBucket"],
+      "Resource": "arn:aws:s3:::<BUCKET>"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:DeleteObject", "s3:GetObject"],
+      "Resource": ["arn:aws:s3:::<BUCKET>/*"]
+    }
+  ]
+}
+```
+
+The cold-archive task (ADR-005 follow-up, deferred) will use a separate IAM user with its own scoped policy. The blast radius of a leaked Litestream credential is contained to the replication bucket; a leaked cold-archive credential is contained to the archive prefix. This separation is intentional.
+
+`journald` is configured for persistent storage. `/etc/systemd/journald.conf.d/persistent.conf` sets `Storage=persistent` and `SystemMaxUse=2G` so logs persist across reboots but cannot grow without bound. The bot logs to stdout in structured JSON (via `pino`); journald captures every line. The operator queries logs with `journalctl -u moonscout.service` or `journalctl -u moonscout-litestream.service`. Sensitive fields (private keys, full wallet addresses, exact position sizes) do not appear in logs per the engineering standards Principle Six; this is enforced at the code level, not the operational level.
+
+Restore from disaster is a documented procedure. If the host is lost — disk failure, accidental termination, region outage — the procedure is: provision a new Hetzner CPX21 in the same region, apply the same Debian 12 base, run the initial-setup runbook (steps below in Implementation Notes), install the bot binary and configuration, stop the bot unit, run `litestream restore -o /var/lib/moonscout/moonscout.db s3://<BUCKET>/moonscout`, verify the restored database integrity via `sqlite3 /var/lib/moonscout/moonscout.db "PRAGMA integrity_check;"`, start the bot unit. Expected recovery time is under one hour assuming the operator is available; the Litestream replication itself has an RPO of seconds-to-minutes for write loss.
+
+## Consequences
+
+The host hardening posture matches the standard 2026 best practice for a single-user VPS handling sensitive credentials. SSH brute force becomes background noise that fail2ban absorbs without operator attention. Local privilege escalation from a hypothetical bot compromise is bounded by the unprivileged user and the systemd `NoNewPrivileges`/`ProtectSystem` sandbox. Kernel-network attacks are mitigated by the sysctl hardening. Memory exfiltration via core dumps is impossible by construction. Each layer is small; the combination is the baseline a money-handling deployment should meet.
+
+The single-host architecture remains a single point of failure for availability. If the Hetzner instance dies, the bot is offline until the operator restores from the S3 replica. For a Phase 1 observation-only deployment this is acceptable — there are no trades to miss; the cost of an outage is a gap in observation data, not lost funds. Phase 4 (fully automated trading) may justify a hot-standby or multi-region setup; that is explicitly a future-ADR concern.
+
+Outbound traffic remains unrestricted. An attacker who compromises the bot process and breaks out of the systemd sandbox can reach any internet host. The defence assumed in that scenario is the wallet adapter's signing-time validation: even if outbound is open, the attacker cannot construct a valid signed transaction that exceeds the hard spending limits ADR-001 places at the lowest layer. The outbound allowlist is the next tightening if the threat model evolves; it is not free, and the trade-off is operational complexity vs an attack path that the existing wallet defences already mitigate.
+
+Unattended security upgrades introduce a small risk that a regression in a patched package breaks the bot. The patches are restricted to the `Debian-Security` archive (not generic updates), and Debian's security backporting is conservative; the historical incident rate of unattended-upgrades breaking a Debian Stable system is very low. The trade-off in the other direction — leaving CVEs unpatched on a public-internet VPS — is unacceptable. The operator can pin or hold individual packages if a regression is observed.
+
+The manual reboot policy means the operator must check `/var/run/reboot-required` periodically. This is a real ongoing chore. A future automation could alert the operator when a reboot is pending; that is out of scope for the deploy gate and tracked as a follow-up.
+
+The Litestream-IAM-user-separate-from-cold-archive split adds a small operational overhead (two AWS users to track) but bounds the blast radius of any one credential leak. A compromised Litestream credential lets an attacker write to the bucket but not delete the cold archive; a compromised cold-archive credential lets an attacker overwrite archived data but not corrupt the live replication. Both compromised together is the same as one compromised today; the split is an improvement, not a perfect defence.
+
+Persistent journald with a 2 GB cap means logs from the most recent operational window are always available for debugging, with older logs rotated out automatically. Two gigabytes is roughly two weeks of bot logs at Phase 1 verbosity; that is sufficient for any reasonable post-incident investigation. The retention bound is a tuning value, not a structural choice; it changes by editing one config field.
+
+The restore procedure has a real operator-availability dependency. If the operator is unreachable and the host dies, the bot stays down until they return. For Phase 1 this is acceptable. Production trading in Phase 3+ may warrant alerting that pages the operator on bot-down conditions; that is a future-ADR concern.
+
+## Alternatives Considered
+
+We considered Ubuntu 24.04 LTS instead of Debian 12. Ubuntu offers a longer free support window (5 years vs Debian's 3) and optional Ubuntu Pro features like kernel livepatch. We chose Debian for two reasons. First, Debian's stricter package-version freeze better matches the project's supply-chain posture, which is explicitly conservative about npm packages and would be inconsistent if the underlying OS pulled in feature updates. Second, the 3-year support window is much longer than Phase 1's expected duration, and an OS major-version upgrade is something the operator can plan around when the time comes. Ubuntu remains defensible; Debian is the recommended choice.
+
+We considered moving SSH to a non-standard port. The research consensus is that port change reduces log noise from automated scanners but does not block any attack a real adversary would mount. For a single-operator deployment where the operator can act on real log entries promptly, the noise reduction has small operational value. We default to keeping port 22 because the operational complexity (every SSH command needs `-p`, every monitoring tool needs to know the port, ansible/scp/rsync configurations need updates) is real and the security benefit is marginal. The operator can move the port later if log noise becomes a real burden.
+
+We considered an outbound firewall allowlist that restricts the bot to only the hosts it actually needs (Helius WebSocket endpoints, RugCheck, Telegram, Jupiter, AWS S3). This would meaningfully tighten the "bot is compromised" scenario by blocking exfiltration to attacker-controlled servers. We rejected it for Phase 1 because the allowlist is operationally fiddly (Helius rotates IPs, RugCheck rotates IPs, AWS S3 has a huge IP range), because the same threat is partially mitigated by ADR-001's hard spending limits at the signing layer, and because the cost of getting the allowlist wrong is bot downtime. This is a defensible Phase 2 or Phase 3 tightening when the threat model is more concrete.
+
+We considered running Litestream as root with full S3 access. The Litestream documentation flags this as the quick-start path. We rejected it because least-privilege IAM is a foundational principle, root is unnecessary for what Litestream actually does (read the WAL, write to S3 — both possible as the `moonscout` user), and a compromised Litestream process running as root would give an attacker the entire host. The dedicated unprivileged user plus the scoped S3 policy is the only defensible posture.
+
+We considered enabling `SystemCallFilter=@system-service` in the systemd units, which is the next tier of sandboxing beyond the directives chosen. We deferred it because Node.js makes a wide variety of syscalls that can be surprised by aggressive filtering, and the project does not yet have the operational data to know which filters are safe. A future tightening adds `SystemCallFilter` after observation shows the bot's syscall pattern is stable. The current directive set (`NoNewPrivileges`, `ProtectSystem=strict`, `ProtectHome`, `PrivateTmp`, `LimitCORE`) provides the substantial-protection baseline; `SystemCallFilter` is the marginal additional tightening.
+
+We considered Tailscale or a similar zero-trust overlay for SSH access, removing SSH from the public internet entirely. The research surfaces this as a real 2026 best practice for VPS deployments. We deferred it because it adds an operational dependency (the Tailscale daemon, an external control plane) for a single-operator deployment where the existing SSH posture (key-only + fail2ban + cloud firewall) is already strong. The operator can adopt Tailscale later if they want defence-in-depth beyond the current set; it does not change the underlying architecture.
+
+We considered automatically rebooting the host after unattended kernel updates. This would close the patched-but-not-rebooted window automatically. We rejected automatic reboots because the operator should be aware when the bot restarts, and an unplanned reboot could land mid-Pump.fun-launch and lose observation data for that token. Manual reboot at operator convenience is the right trade.
+
+## Implementation Notes
+
+The initial-setup runbook for a fresh Hetzner CPX21 follows a fixed sequence. First, provision the instance in the chosen Hetzner region with Debian 12 as the base image and the operator's SSH public key attached at provision time (Hetzner offers this in the create-instance dialog). Second, on first login as `root`, run `apt update && apt upgrade -y` to pick up any security patches released between the image build and provisioning. Third, create the `moonscout` user with `useradd -r -s /usr/sbin/nologin -d /var/lib/moonscout -m moonscout` and create `/etc/moonscout/` with `mkdir -p /etc/moonscout && chown root:moonscout /etc/moonscout && chmod 0750 /etc/moonscout`. Fourth, install the required packages: `apt install -y nodejs ufw fail2ban unattended-upgrades update-notifier-common litestream` (Node.js comes from a `NodeSource` repo per the version pinned in ADR-004; Litestream comes from its official .deb).
+
+Configure SSH at `/etc/ssh/sshd_config.d/99-moonscout-hardening.conf` with `PermitRootLogin no`, `PasswordAuthentication no`, `PubkeyAuthentication yes`, `AllowUsers <operator-user>`, and `KbdInteractiveAuthentication no`. Restart sshd with `systemctl restart ssh`. Verify by attempting password login from a second terminal — it should fail — before closing the existing session.
+
+Configure UFW with `ufw default deny incoming`, `ufw default allow outgoing`, `ufw allow 22/tcp`, `ufw enable`. Verify with `ufw status verbose`. The Hetzner Cloud Firewall is configured separately in the Hetzner console with the same single-rule policy.
+
+Configure fail2ban by creating `/etc/fail2ban/jail.d/sshd.local` with `[sshd]` section, `enabled = true`, `bantime = 86400`, `findtime = 600`, `maxretry = 3`. Restart with `systemctl restart fail2ban` and verify with `fail2ban-client status sshd`.
+
+Configure unattended-upgrades by editing `/etc/apt/apt.conf.d/50unattended-upgrades` to enable only `${distro_id}:${distro_codename}-security` and to set `Unattended-Upgrade::Automatic-Reboot "false"`. Verify the timer with `systemctl status unattended-upgrades`.
+
+Apply sysctl hardening by creating `/etc/sysctl.d/99-moonscout-hardening.conf` with the settings listed in the Decision section, then running `sysctl --system`. Verify selected values with `sysctl net.ipv4.tcp_syncookies` (should return `1`).
+
+Disable core dumps by creating `/etc/systemd/coredump.conf.d/disable.conf` with `[Coredump]\nStorage=none\nProcessSizeMax=0`, creating a sysctl drop-in with `kernel.core_pattern=|/bin/false` and `fs.suid_dumpable=0`, and running `systemctl daemon-reload && sysctl --system`. Each systemd unit additionally sets `LimitCORE=0`.
+
+Install the `.env` file by `scp`ing it from the operator's local Mac to `/etc/moonscout/.env` and then setting permissions: `chown root:moonscout /etc/moonscout/.env && chmod 0640 /etc/moonscout/.env`. Verify only `root` and `moonscout` can read it with `ls -l /etc/moonscout/.env`.
+
+Deploy the bot itself by `scp`ing the built bundle to `/opt/moonscout/` (or building from the cloned repo on the server, depending on operational preference). The systemd unit files for `moonscout.service` and `moonscout-litestream.service` go in `/etc/systemd/system/`. Their content is checked into the repo at `deploy/systemd/` so the operator does not write them by hand. Enable both with `systemctl enable moonscout-litestream.service moonscout.service`.
+
+Litestream configuration at `/etc/litestream.yml` declares the database file under `dbs:` and a single S3 replica with the bucket name, region, and path prefix. The S3 credentials are loaded from the same `.env` file the bot uses, sourced into Litestream's environment via the systemd unit's `EnvironmentFile`.
+
+Start the units in order: `systemctl start moonscout-litestream.service`, verify it is replicating with `journalctl -u moonscout-litestream.service -f` (look for replication progress lines), then `systemctl start moonscout.service`. The bot should connect to Helius and begin processing events within seconds. Verify with `journalctl -u moonscout.service -f` and confirm a Telegram "moonscout started" message arrives.
+
+Operational verification after first deploy: confirm fail2ban is banning the inevitable inbound SSH attempts (it will, within hours), confirm unattended-upgrades has run at least once (`journalctl -u unattended-upgrades`), confirm Litestream replication is current (`litestream replicas` and check timestamps), confirm a test restore works against a non-production scratch path before trusting it for real disaster recovery.
+
+When working with Claude Code on operational changes, the discipline that matters is: no shell access for the `moonscout` user (verified by attempting `su moonscout` — it should fail), no group memberships that grant elevated capability (verified by `id moonscout`), no world-readable `.env` (verified by `ls -l /etc/moonscout/.env`), no unbounded log growth (verified by `journalctl --disk-usage`), and no Litestream gap (verified by replication-progress logs). These five invariants are the operational floor; any deviation from any of them is a security regression even if the bot still appears to work.
