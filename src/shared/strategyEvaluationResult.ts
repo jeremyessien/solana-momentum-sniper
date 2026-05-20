@@ -18,7 +18,7 @@ export type PassReasonCode =
   | 'mint_authority_active'
   | 'freeze_authority_active'
   | 'top_holder_excessive'
-  | 'score_above_threshold';
+  | 'score_too_risky';
 
 export type WatchReasonCode = 'score_borderline' | 'holder_concentration_borderline';
 
