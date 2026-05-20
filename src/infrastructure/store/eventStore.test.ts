@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { DetectedToken } from '../../shared/detectedToken.js';
 import { ok } from '../../shared/result.js';
 import type { RugCheckSnapshot } from '../../shared/rugCheckSnapshot.js';
+import type { StrategyEvaluationResult } from '../../shared/strategyEvaluationResult.js';
 import type { TokenTrackingClosed } from '../../shared/tokenTrackingClosed.js';
 import type { TokenTradeObserved } from '../../shared/tokenTradeObserved.js';
 import type { TokenWithFullContext } from '../../shared/tokenWithFullContext.js';
@@ -327,5 +328,43 @@ describe('createSqliteEventStore', () => {
   test('pruneTradesOlderThan rejects non-positive chunkSize', () => {
     expect(() => store.pruneTradesOlderThan(0n, 0)).toThrow(/chunkSize must be >= 1/);
     expect(() => store.pruneTradesOlderThan(0n, -10)).toThrow(/chunkSize must be >= 1/);
+  });
+
+  test('recordStrategyDecision writes lifecycle row and bumps last_event_seq', () => {
+    const detection = buildDetection();
+    store.recordDetection(detection);
+
+    const decision: StrategyEvaluationResult = {
+      strategyId: 'data-collection',
+      candidate: buildAnalysis(),
+      thresholds: {
+        enterMaxScoreNormalised: 30,
+        enterMaxTopHolderPercent: 20,
+        watchMaxScoreNormalised: 60,
+        watchMaxTopHolderPercent: 30,
+      },
+      decision: { kind: 'pass', reasons: ['score_too_risky'] },
+      evaluatedAt: new Date('2026-05-15T10:00:02.000Z'),
+    };
+    store.recordStrategyDecision(decision);
+
+    const row = reader
+      .prepare(
+        "SELECT event_type, token_internal_id, payload FROM lifecycle_events WHERE event_type = 'strategyDecisionRecorded'",
+      )
+      .get() as { event_type: string; token_internal_id: string; payload: string };
+
+    expect(row.event_type).toBe('strategyDecisionRecorded');
+    expect(row.token_internal_id).toBe(detection.internalId);
+
+    const payload = JSON.parse(row.payload);
+    expect(payload.strategyId).toBe('data-collection');
+    expect(payload.decision).toEqual({ kind: 'pass', reasons: ['score_too_risky'] });
+    expect(payload.thresholds).toEqual(decision.thresholds);
+
+    const tracked = reader
+      .prepare('SELECT last_event_seq FROM tracked_tokens WHERE token_internal_id = ?')
+      .get(detection.internalId) as { last_event_seq: bigint };
+    expect(tracked.last_event_seq).toBeGreaterThan(0n);
   });
 });

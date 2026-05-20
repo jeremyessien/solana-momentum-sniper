@@ -22,6 +22,7 @@ import {
 import { wireTelegramNotifications } from './interface/wireTelegramNotifications.js';
 import type { EventMap } from './shared/eventMap.js';
 import { PUMP_FUN_PROGRAM_ID } from './shared/launchpadPrograms.js';
+import { wireStrategy } from './strategy/wireStrategy.js';
 
 const SHUTDOWN_GOODBYE_TIMEOUT_MS = 5_000;
 const STARTUP_SEND_TIMEOUT_MS = 5_000;
@@ -139,6 +140,7 @@ const main = async (): Promise<void> => {
     subscribeToAnalysisCompleted: (h) => eventBus.subscribe('tokenAnalysisCompleted', h),
     subscribeToTradeObserved: (h) => eventBus.subscribe('tokenTradeObserved', h),
     subscribeToTrackingClosed: (h) => eventBus.subscribe('tokenTrackingClosed', h),
+    subscribeToStrategyDecision: (h) => eventBus.subscribe('strategyDecisionRecorded', h),
     eventStore,
     logger,
     signal: ctrl.signal,
@@ -175,6 +177,14 @@ const main = async (): Promise<void> => {
     subscribeToTrackingClosed: (h) => eventBus.subscribe('tokenTrackingClosed', h),
     publishAnalysisCompleted: (a) => eventBus.publish('tokenAnalysisCompleted', a),
     rugcheckClient,
+    clock,
+    logger,
+    signal: ctrl.signal,
+  });
+
+  wireStrategy({
+    subscribeToAnalysisCompleted: (h) => eventBus.subscribe('tokenAnalysisCompleted', h),
+    publishStrategyDecision: (d) => eventBus.publish('strategyDecisionRecorded', d),
     clock,
     logger,
     signal: ctrl.signal,
