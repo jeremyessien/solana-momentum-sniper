@@ -1,0 +1,17 @@
+[Unit]
+Description=Moonscout Litestream replication health check
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=healthcheck
+Group=healthcheck
+ExecStart=/usr/local/bin/moonscout-litestream-healthcheck
+EnvironmentFile=/etc/moonscout/healthcheck.env
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+LimitCORE=0
