@@ -110,6 +110,18 @@ Three concrete inputs for the Phase 2 strategy design conversation:
 2. **Top-holder concentration is a usable feature; risk score on its own is not.** A Phase 2 strategy that filters on top-holder share has real signal to work with. A strategy that filters mainly on the RugCheck normalised score does not.
 3. **Beware of entering when the safety check is blind.** Phase 2 design should require positive evidence (a populated `topHolders` array, a non-trivial holder count from a reliable source) before entering, not merely the absence of red flags.
 
+## External Precedent
+
+Two of the implications above have published empirical precedent worth recording before the Phase 2 strategy ADR cites them.
+
+The wallet-pattern direction maps onto Vaglica et al. (2008) and Lillo et al. (2008b), studies of the Spanish Stock Exchange surveyed in Bouchaud, Farmer, and Lillo's *How Markets Slowly Digest Changes in Supply and Demand*. Vaglica detected "hidden orders" — single traders building large positions in smaller chunks over time — by looking for sustained directional drift in an institution's inventory time-series. Lillo clustered institutions by the cross-correlation of their inventory changes and found three behavioural species: trend-followers with autocorrelated order flow, mean-reverters who provide liquidity, and uncategorised. On Solana the underlying data is richer — every trade by every wallet is public — so the methodology should port directly to memecoin wallet classification. The Phase 2 "wallet diversity, time-clustering, creator-trade flag" features are a memecoin-adapted version of a tested technique, not a hopeful invention.
+
+One counter-intuitive result worth carrying: Vaglica found that bigger hidden orders are worked *slower*, not faster — patience scales with size. A memecoin with rapid, urgent buying from many wallets is therefore not automatically more suspicious of coordination than one with slow, paced accumulation from a small cluster. The intuition flips easily the wrong way.
+
+Section 10 of the same paper adds one Phase 3 guardrail. The permanent component of trading impact drops out of any execution optimisation — it is a sunk cost no order-splitting scheme can avoid. Phase 2's paper-trading EV calculations must therefore subtract realistic round-trip slippage (entry on the bonding curve, exit on the post-graduation pool) from gross peak-vs-entry price movement. Strategies that look profitable on peak prices and unprofitable in live trading typically fail at exactly this point.
+
+The paper's broader framing — that on anonymous markets, "any useful notion of information must be internal to the market: trades, order flow, cancellations *are* information" — is the version of this project's data-collection posture that has explicit theoretical backing. The design choice to record everything and let patterns surface sits on the right side of the literature.
+
 ## Methodology Notes
 
 Two patterns from this round of analysis are worth carrying forward:
@@ -122,4 +134,5 @@ Two patterns from this round of analysis are worth carrying forward:
 - ADR-005 — Data Store and Persistence (defines the schema this analysis queries)
 - ADR-006 — Enrichment Readiness Signal (defines when RugCheck is fetched, which informs the blind-data hypothesis)
 - ADR-007 — Strategy Decision Shape (defines the decision/reasons recording that made this analysis possible)
+- *How Markets Slowly Digest Changes in Supply and Demand* — Bouchaud, Farmer, Lillo (2009). The market microstructure review whose Sections 10 and 11 inform the External Precedent section above.
 - Future ADR — Phase 2 strategy (to be written; will cite this document for calibration evidence)
