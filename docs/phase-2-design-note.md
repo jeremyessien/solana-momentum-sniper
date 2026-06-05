@@ -102,7 +102,7 @@ Three things a paranoid reviewer would flag, recorded so they are not forgotten:
 
 2. **Filter chains and sample size.** If the candidate strategy combines top-holder filter, blind-data guard, and score floor, the intersection of three filters can produce very few entries. A strategy that selects three coins out of 32,000 has high precision but no statistical power; the resulting numbers are dominated by noise. The analysis must report sample size at every cut, and refuse to draw conclusions from samples below a documented threshold (somewhere around 30 selected coins minimum, subject to confidence interval analysis).
 
-3. **The missing post-graduation price.** Even after Shape A is done, the question of "what happened to the price after graduation" is unanswered. Phase 2 cannot end without that data being acquired from somewhere — Birdeye, Dexscreener, direct on-chain Raydium pool reads, or an extended bot tracking window. The decision of where post-graduation price data comes from is itself a Phase 2 decision that needs its own evaluation.
+3. **The missing post-graduation price.** Even after Shape A is done, the question of "what happened to the price after graduation" is unanswered. Phase 2 cannot end without that data being acquired from somewhere — Birdeye, Dexscreener, direct on-chain PumpSwap pool reads, or an extended bot tracking window. The decision of where post-graduation price data comes from is itself a Phase 2 decision that needs its own evaluation.
 
 ## Ground-truth verification
 
@@ -119,7 +119,7 @@ The four open questions raised by the design block above were resolved on 5 June
 
 **Starting shape — Shape A confirmed.** The asymmetric-returns framework — many small losses, occasional medium wins, rare large wins, positive expectation in aggregate — is the strategy direction. The relevant tradeoff (roughly 60% losing trades is expected and irreducible in memecoin markets) is acknowledged and addressed in the Operator psychology section below.
 
-**Post-graduation price data — extend the bot to track PumpSwap pools directly via the existing Helius RPC.** No new external data provider, no new API key, zero additional service cost. This contradicts older project documentation that assumes Raydium as the graduation destination; the platform changed in early 2025 when Pump.fun launched their own AMM (PumpSwap), and a separate documentation pass is required to correct Raydium → PumpSwap references across the architecture and ADRs. The 175 already-graduated coins from the first 12 days are written off as historical loss; post-graduation coverage begins prospectively with the next graduates.
+**Post-graduation price data — extend the bot to track PumpSwap pools directly via the existing Helius RPC.** No new external data provider, no new API key, zero additional service cost. This contradicts older project documentation that initially assumed Raydium as the graduation destination; the platform changed in early 2025 when Pump.fun launched their own AMM (PumpSwap), and the resulting documentation drift has since been corrected. The 175 already-graduated coins from the first 12 days are written off as historical loss; post-graduation coverage begins prospectively with the next graduates.
 
 **Trade-sizing assumption — 0.1 SOL per paper trade.** Placeholder only, sufficient for Phase 2 P&L math. The real sizing decision belongs to a future Phase 3 ADR informed by measured edge. The professional standard (fractional Kelly, typically 25–50% of full Kelly) requires at least 50–100 completed trades to estimate the parameters with any confidence, which is exactly what Phase 2 produces.
 
@@ -159,7 +159,6 @@ Three items raised during Phase 2 design that are real and worth recording, but 
 - ADR-005 — Data Store and Persistence (defines the schema Phase 2 reads).
 - ADR-006 — Enrichment Readiness Signal (defines when RugCheck data is fetched, relevant to the blind-data guard).
 - ADR-007 — Strategy Decision Shape (defines the labelling-vs-trading distinction that affects the Phase 2 backtest population).
-- Future doc pass — Raydium → PumpSwap correction across the architecture and ADRs that predate the early-2025 platform change.
 - Future ADR — Phase 2 strategy (to be written; this design note becomes its evidence).
 - Future ADR — Phase 3 position-sizing rules (informed by the practical-books synthesis recorded in the External Precedent section of [phase-1-findings.md](phase-1-findings.md) and the fractional-Kelly research cited in the Decisions section above).
 - Future ADR — Operations dashboard (deferred; see Deferred to future phases).

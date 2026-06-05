@@ -50,7 +50,7 @@ The token detection layer subscribes to streams from the infrastructure layer an
 
 The reason this is its own module is that the axis of change is "what counts as a detection event." Over time we may add new launchpads, decide to monitor liquidity additions to existing pools, or detect graduations from Pump.fun to PumpSwap. All of these changes affect only this module. The detection layer's output type is small and stable, containing only the bare minimum needed to identify a token and start investigating it.
 
-A subtle but important property of the detection layer is that it is the only place in the system that translates from the messy reality of Solana program logs into our clean internal types. The detection layer reads transaction signatures, parses program instruction data, and extracts the relevant fields. By the time a detection event reaches the rest of the system, it has been normalized into a shape that is consistent across all launchpads. A token detected on Pump.fun and a token detected on Raydium look the same to downstream modules.
+A subtle but important property of the detection layer is that it is the only place in the system that translates from the messy reality of Solana program logs into our clean internal types. The detection layer reads transaction signatures, parses program instruction data, and extracts the relevant fields. By the time a detection event reaches the rest of the system, it has been normalized into a shape that is consistent across all launchpads. A token detected on Pump.fun and a token detected on Moonshot look the same to downstream modules.
 
 ### The Enrichment Layer
 
