@@ -25,7 +25,9 @@
     "capture:pumpfun-fixtures": "tsx --env-file=.env scripts/capture-pumpfun-fixtures.ts",
     "capture:pumpfun-trade-fixtures": "tsx --env-file=.env scripts/capture-pumpfun-trade-fixtures.ts",
     "investigate:rugcheck-fresh": "tsx --env-file=.env scripts/investigate-rugcheck-fresh-token.ts",
-    "investigate:pumpfun-race": "tsx --env-file=.env scripts/investigate-pumpfun-create-trade-race.ts"
+    "investigate:pumpfun-race": "tsx --env-file=.env scripts/investigate-pumpfun-create-trade-race.ts",
+    "investigate:pumpportal": "tsx scripts/investigate-pumpportal-newtoken.ts",
+    "verify:pumpportal-creator": "tsx --env-file=.env scripts/verify-pumpportal-creator.ts"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.14",
