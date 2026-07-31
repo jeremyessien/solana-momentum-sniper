@@ -1,8 +1,3 @@
-// Fidelity audit: for each captured Pump.fun sample, fetch the create tx and
-// decode the on-chain creator and virtual_sol_reserves with our borsh parser,
-// then compare to PumpPortal's traderPublicKey and vSolInBondingCurve.
-// Run: pnpm exec tsx --env-file=.env scripts/verify-pumpportal-creator.ts
-
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';

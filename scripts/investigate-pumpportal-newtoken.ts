@@ -1,12 +1,3 @@
-// One-shot probe: connect to PumpPortal's free data WebSocket, subscribe to new
-// Pump.fun token creations, print the first few raw messages, then exit.
-//
-// Purpose: ground-truth the actual message shape before we map it onto
-// DetectedToken. No API key required. PumpPortal asks clients to keep a single
-// connection rather than reconnecting in a loop, so run this once and let it
-// finish:
-//   pnpm exec tsx scripts/investigate-pumpportal-newtoken.ts
-
 const PUMPPORTAL_WS_URL = 'wss://pumpportal.fun/api/data';
 const MAX_MESSAGES = 6;
 const TIMEOUT_MS = 60_000;

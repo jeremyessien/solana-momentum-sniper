@@ -39,11 +39,7 @@ export const parsePumpPortalNewToken = (
     internalId: options.internalId,
     mint,
     launchpad: 'pumpfun',
-    // Launch signer, not the on-chain `creator` the log parser reads; verified to
-    // diverge on some launches. Not for creator-based signals until resolved on-chain.
     creatorWallet: traderPublicKey,
-    // Post-buy virtual SOL reserve (30 + dev buy). The borsh path records the pre-buy
-    // constant (~30 SOL); this varies, so the two sources are not directly comparable.
     initialLiquidityLamports: BigInt(lamports),
     detectedAt: options.detectedAt,
   };
