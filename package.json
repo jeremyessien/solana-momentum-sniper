@@ -27,6 +27,7 @@
     "investigate:rugcheck-fresh": "tsx --env-file=.env scripts/investigate-rugcheck-fresh-token.ts",
     "investigate:pumpfun-race": "tsx --env-file=.env scripts/investigate-pumpfun-create-trade-race.ts",
     "investigate:pumpportal": "tsx scripts/investigate-pumpportal-newtoken.ts",
+    "investigate:rugcheck-readiness": "tsx scripts/investigate-rugcheck-readiness.ts",
     "verify:pumpportal-creator": "tsx --env-file=.env scripts/verify-pumpportal-creator.ts"
   },
   "devDependencies": {
